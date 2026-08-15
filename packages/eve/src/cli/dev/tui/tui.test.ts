@@ -43,6 +43,30 @@ describe("runDevelopmentTui", () => {
     expect(second.session).toBeUndefined();
   });
 
+  it("forwards product display options and installs a custom model command", async () => {
+    const target = {
+      kind: "local",
+      serverUrl: "http://127.0.0.1:4321/",
+      workspaceRoot: "/tmp/app",
+    } satisfies DevelopmentTuiTarget;
+    const modelCommand = vi.fn(async () => "Selected acme/fast.");
+
+    await runDevelopmentTui({
+      target,
+      modelCommand,
+      headerTips: ["Use /model to choose a model."],
+      externalProviderDisplayNames: { acme: "acme-subscription" },
+      showVercelAuthSetupIssues: false,
+    });
+
+    expect(mocks.runnerOptions[0]).toMatchObject({
+      headerTips: ["Use /model to choose a model."],
+      externalProviderDisplayNames: { acme: "acme-subscription" },
+      showVercelAuthSetupIssues: false,
+      promptCommandHandler: expect.objectContaining({ handle: expect.any(Function) }),
+    });
+  });
+
   it.each([
     [
       "remote",

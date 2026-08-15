@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,19 +181,59 @@ function stripPathQueryAndHash(path: string): string {
 }
 
 function stripFileSystemPrefix(path: string): string {
-  return path.startsWith("/@fs/") ? path.slice("/@fs".length) : path;
+  if (!path.startsWith("/@fs/")) return path;
+
+  const fileSystemPath = path.slice("/@fs/".length);
+  if (/^[A-Za-z]:\//u.test(fileSystemPath)) return fileSystemPath;
+  return fileSystemPath.startsWith("/") ? fileSystemPath : `/${fileSystemPath}`;
+}
+
+function stripAbsolutePathMetadataSuffix(path: string): string {
+  if ((!path.includes("?") && !path.includes("#")) || existsSync(path)) {
+    return path;
+  }
+
+  // `?` and `#` are valid POSIX filename characters. Prefer the longest
+  // existing path before treating either marker as Rollup metadata.
+  let suffixIndex = Math.max(path.lastIndexOf("?"), path.lastIndexOf("#"));
+  while (suffixIndex > 0) {
+    const candidatePath = path.slice(0, suffixIndex);
+    if (existsSync(candidatePath)) {
+      return candidatePath;
+    }
+    suffixIndex = Math.max(
+      path.lastIndexOf("?", suffixIndex - 1),
+      path.lastIndexOf("#", suffixIndex - 1),
+    );
+  }
+
+  // Virtual/nonexistent absolute ids cannot be disambiguated by the filesystem;
+  // retain the conventional first query-or-hash boundary.
+  const firstQueryIndex = path.indexOf("?");
+  const firstHashIndex = path.indexOf("#");
+  const firstSuffixIndex =
+    firstQueryIndex === -1
+      ? firstHashIndex
+      : firstHashIndex === -1
+        ? firstQueryIndex
+        : Math.min(firstQueryIndex, firstHashIndex);
+  return firstSuffixIndex === -1 ? path : path.slice(0, firstSuffixIndex);
 }
 
 function resolveNitroModuleComparisonPath(rootDir: string, path: string): string {
   if (path.startsWith("file://")) {
-    return normalizePath(stripFileSystemPrefix(stripPathQueryAndHash(fileURLToPath(path))));
+    return normalizePath(stripFileSystemPrefix(fileURLToPath(path)));
+  }
+
+  if (path.startsWith("/@fs/")) {
+    return normalizePath(stripAbsolutePathMetadataSuffix(stripFileSystemPrefix(path)));
   }
 
   if (isAbsolute(path)) {
-    return normalizePath(stripFileSystemPrefix(stripPathQueryAndHash(path)));
+    return normalizePath(stripAbsolutePathMetadataSuffix(path));
   }
 
-  return normalizePath(stripFileSystemPrefix(stripPathQueryAndHash(resolve(rootDir, path))));
+  return normalizePath(stripFileSystemPrefix(resolve(rootDir, stripPathQueryAndHash(path))));
 }
 
 function isWorkflowBundlePath(path: string, normalizedWorkflowBuildDir: string): boolean {

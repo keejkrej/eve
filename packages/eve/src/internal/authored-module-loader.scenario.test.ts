@@ -1,19 +1,63 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
 import { compileAgentManifest } from "#compiler/normalize-manifest.js";
 import { discoverAgent } from "#discover/discover-agent.js";
+import { resolvePackageRoot } from "#internal/application/package.js";
 import {
   bundleAuthoredModuleForGeneration,
   loadAuthoredModuleNamespace,
 } from "#internal/authored-module-loader.js";
 import { useScenarioApp } from "#internal/testing/scenario-app.js";
 
+const runFile = promisify(execFile);
+
 describe("loadAuthoredModuleNamespace", () => {
   const scenarioApp = useScenarioApp();
+
+  it("loads authored modules from app paths containing #", async () => {
+    const appRoot = await mkdtemp(join(tmpdir(), "eve-authored-module-#-"));
+    const moduleDirectoryPath = join(appRoot, "agent", "tools");
+    const modulePath = join(moduleDirectoryPath, "hash-path.ts");
+
+    try {
+      await mkdir(moduleDirectoryPath, { recursive: true });
+      await Promise.all([
+        writeFile(
+          join(appRoot, "package.json"),
+          JSON.stringify({ name: "hash-path-app", private: true, type: "module" }),
+        ),
+        writeFile(modulePath, 'export const result = "loaded-from-hash-path";\n'),
+      ]);
+
+      const loaderUrl = pathToFileURL(
+        join(resolvePackageRoot(), "src", "internal", "authored-module-loader.ts"),
+      ).href;
+      const { stdout } = await runFile(process.execPath, [
+        "--conditions=eve-source",
+        "--input-type=module",
+        "--eval",
+        [
+          "const [loaderUrl, modulePath] = process.argv.slice(1);",
+          "const { loadAuthoredModuleNamespace } = await import(loaderUrl);",
+          "const moduleNamespace = await loadAuthoredModuleNamespace(modulePath);",
+          "process.stdout.write(JSON.stringify(moduleNamespace.result));",
+        ].join("\n"),
+        loaderUrl,
+        modulePath,
+      ]);
+
+      expect(JSON.parse(stdout)).toBe("loaded-from-hash-path");
+    } finally {
+      await rm(appRoot, { force: true, recursive: true });
+    }
+  });
 
   it("preserves cached channel identity for relative channel imports", async () => {
     const app = await scenarioApp({

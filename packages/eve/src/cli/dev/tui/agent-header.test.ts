@@ -174,4 +174,9 @@ describe("pickAgentHeaderTip", () => {
     expect(pickAgentHeaderTip(() => 0)).toBe(AGENT_HEADER_TIPS[0]);
     expect(pickAgentHeaderTip(() => 0.999)).toBe(AGENT_HEADER_TIPS.at(-1));
   });
+
+  it("selects from a caller-supplied pool and supports an empty pool", () => {
+    expect(pickAgentHeaderTip(() => 0.999, ["First", "Second"])).toBe("Second");
+    expect(pickAgentHeaderTip(() => 0, [])).toBeUndefined();
+  });
 });

@@ -288,6 +288,8 @@ export type TerminalRendererOptions = {
   diagnostics?: DevDiagnostics;
   /** Slash commands available in this local or remote session. */
   availablePromptCommands?: readonly PromptCommandSpec[];
+  /** Presentation aliases for external model provider identifiers. */
+  externalProviderDisplayNames?: Readonly<Record<string, string>>;
   onExitRequest?: () => void;
 };
 
@@ -367,6 +369,7 @@ export class TerminalRenderer implements AgentTUIRenderer {
   readonly #captureForeignOutput: boolean;
   readonly #diagnostics?: DevDiagnostics;
   readonly #availablePromptCommands: readonly PromptCommandSpec[];
+  readonly #externalProviderDisplayNames?: Readonly<Record<string, string>>;
   /** Which captured log sources render. Mutable via {@link setLogDisplayMode}. */
   #logs: LogDisplayMode;
 
@@ -624,6 +627,7 @@ export class TerminalRenderer implements AgentTUIRenderer {
     this.#onExitRequest = options?.onExitRequest;
     this.#logs = options?.logs ?? "none";
     this.#availablePromptCommands = options?.availablePromptCommands ?? PROMPT_COMMANDS;
+    this.#externalProviderDisplayNames = options?.externalProviderDisplayNames;
   }
 
   /**
@@ -4290,6 +4294,9 @@ export class TerminalRenderer implements AgentTUIRenderer {
       width: contentWidth,
     };
     if (this.#logLevelHintActive) input.logLevel = this.#logs;
+    if (this.#externalProviderDisplayNames !== undefined) {
+      input.externalProviderDisplayNames = this.#externalProviderDisplayNames;
+    }
     const serverUrl = this.#agentHeader?.serverUrl;
     if (serverUrl !== undefined && this.#remoteConnection === undefined) {
       const serverPort = new URL(serverUrl).port;

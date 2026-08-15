@@ -1,5 +1,3 @@
-import { CONNECTION_CATALOG } from "#setup/scaffold/index.js";
-
 const DEFAULT_PROBE_INTERVAL_MS = 60_000;
 
 export type McpConnectionProbe = (input: {
@@ -48,6 +46,7 @@ export interface McpConnectionStatusTracker {
 
 export interface McpConnectionStatusTrackerOptions {
   onChange: (disabledConnectionReasons: Readonly<Record<string, string>>) => void;
+  targets: () => readonly { readonly slug: string; readonly url: string }[];
   probe?: McpConnectionProbe;
   intervalMs?: number;
 }
@@ -71,15 +70,13 @@ export function createMcpConnectionStatusTracker(
     const currentController = controller;
     const currentEpoch = ++epoch;
     void Promise.all(
-      CONNECTION_CATALOG.flatMap((entry) => {
-        const url = entry.mcp?.url;
-        if (url === undefined) return [];
-        return [
-          probe({ url, signal: currentController.signal }).then(
-            (reason) => [entry.slug, reason] as const,
+      options
+        .targets()
+        .map((target) =>
+          probe({ url: target.url, signal: currentController.signal }).then(
+            (reason) => [target.slug, reason] as const,
           ),
-        ];
-      }),
+        ),
     )
       .then((results) => {
         if (disposed || currentEpoch !== epoch) return;

@@ -51,6 +51,67 @@ function setupFlowRenderer() {
 }
 
 describe("createPromptCommandHandler", () => {
+  it.each(["", "openai/gpt-5.6-sol"])(
+    "runs a product model command for argument %j inside the setup panel",
+    async (argument) => {
+      const setupFlow = setupFlowRenderer();
+      const modelCommand = vi.fn(async () => `Selected ${argument || "interactively"}.`);
+      const handler = createPromptCommandHandler({
+        target: LOCAL_TARGET,
+        modelCommand,
+      });
+
+      await expect(
+        handler.handle({ type: "extension", name: "model", argument }, context({ setupFlow })),
+      ).resolves.toEqual({
+        message: `Selected ${argument || "interactively"}.`,
+        effect: { kind: "model-access-changed" },
+      });
+      expect(modelCommand).toHaveBeenCalledWith({
+        appRoot: APP_ROOT,
+        serverUrl: LOCAL_TARGET.serverUrl,
+        argument,
+        prompter: expect.objectContaining({ select: expect.any(Function) }),
+      });
+      expect(setupFlow.begin).toHaveBeenCalledWith("Configure the agent model", "pulse");
+      expect(setupFlow.end).toHaveBeenCalledWith({ preserveDiagnostics: false });
+    },
+  );
+
+  it("folds a product model command failure and closes its setup panel", async () => {
+    const setupFlow = setupFlowRenderer();
+    const handler = createPromptCommandHandler({
+      target: LOCAL_TARGET,
+      modelCommand: async () => {
+        throw new Error("credential expired");
+      },
+    });
+
+    await expect(
+      handler.handle({ type: "extension", name: "model", argument: "" }, context({ setupFlow })),
+    ).resolves.toEqual({ message: "Couldn't change the model: credential expired" });
+    expect(setupFlow.end).toHaveBeenCalledWith({ preserveDiagnostics: false });
+  });
+
+  it("treats a cancelled product model picker as a dismissal", async () => {
+    const setupFlow = setupFlowRenderer();
+    const handler = createPromptCommandHandler({
+      target: LOCAL_TARGET,
+      modelCommand: async ({ prompter }) => {
+        await prompter.select({
+          message: "Choose a model",
+          options: [{ value: "openai/gpt-5.6-sol", label: "GPT-5.6 Sol" }],
+        });
+        return "unreachable";
+      },
+    });
+
+    await expect(
+      handler.handle({ type: "extension", name: "model", argument: "" }, context({ setupFlow })),
+    ).resolves.toEqual({ message: "/model dismissed." });
+    expect(setupFlow.end).toHaveBeenCalledWith({ preserveDiagnostics: false });
+  });
+
   it("applies an explicit model slug without opening the picker", async () => {
     const applyModel = vi.fn(
       async ({ slug }: { appRoot: string; slug: string }) =>

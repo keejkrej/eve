@@ -34,12 +34,13 @@ export const AGENT_HEADER_TIPS: readonly string[] = [
 ];
 
 /** Picks one tip; `random` is a test seam over Math.random. */
-export function pickAgentHeaderTip(random: () => number = Math.random): string {
-  const index = Math.min(
-    AGENT_HEADER_TIPS.length - 1,
-    Math.floor(random() * AGENT_HEADER_TIPS.length),
-  );
-  return AGENT_HEADER_TIPS[index]!;
+export function pickAgentHeaderTip(
+  random: () => number = Math.random,
+  tips: readonly string[] = AGENT_HEADER_TIPS,
+): string | undefined {
+  if (tips.length === 0) return undefined;
+  const index = Math.min(tips.length - 1, Math.floor(random() * tips.length));
+  return tips[index];
 }
 
 /**

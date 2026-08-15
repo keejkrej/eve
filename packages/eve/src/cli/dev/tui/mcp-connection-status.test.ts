@@ -43,6 +43,10 @@ describe("createMcpConnectionStatusTracker", () => {
     const tracker = createMcpConnectionStatusTracker({
       intervalMs: 60_000,
       onChange: (snapshot) => snapshots.push(snapshot),
+      targets: () => [
+        { slug: "notion", url: "https://mcp.notion.com/mcp" },
+        { slug: "datadog", url: "https://mcp.datadoghq.com/api/mcp" },
+      ],
       probe: async ({ url }) =>
         url === "https://mcp.datadoghq.com/api/mcp" && !datadogAvailable
           ? `${url} is not reachable (HTTP 404).`

@@ -7,7 +7,7 @@ import {
 } from "#compiled/shadcn-registry/index.js";
 import semver from "#compiled/semver/index.js";
 import { resolveInstalledPackageInfo } from "#internal/application/package.js";
-import { createPrompter, type Prompter } from "#setup/prompter.js";
+import type { Prompter } from "#setup/prompter.js";
 import type { RegistrySetupCompletion } from "#setup/registry-setup-protocol.js";
 import { WizardCancelledError } from "#setup/step.js";
 
@@ -95,7 +95,6 @@ export interface RegistryCatalogResult {
 }
 
 const defaultAddCommandDependencies: AddCommandDependencies = {
-  createPrompter,
   hasInteractiveTerminal,
   loadSetupCommandRunner: async () =>
     (await import("./registry-setup-command.js")).runRegistrySetupCommand,
@@ -583,7 +582,7 @@ export async function runAddCommand(
         const prompter =
           options.prompter ??
           dependencies.createPrompter?.() ??
-          defaultAddCommandDependencies.createPrompter!();
+          (await import("#setup/prompter.js")).createPrompter();
         const shouldRun = await prompter.select({
           message: `Set up ${item} now?`,
           initialValue: "yes",

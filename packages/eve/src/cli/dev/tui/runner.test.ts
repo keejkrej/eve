@@ -332,6 +332,25 @@ describe("EveTUIRunner agent header", () => {
     expect(renderer.readPrompt).toHaveBeenCalled();
   });
 
+  it("uses caller-supplied header tips", async () => {
+    const headers: AgentTUIAgentHeader[] = [];
+    const client = stubClient();
+    vi.spyOn(client, "info").mockResolvedValue(AGENT_INFO);
+
+    await new EveTUIRunner({
+      session: stubSession(),
+      client,
+      renderer: fakeRenderer({ renderAgentHeader: (header) => headers.push(header) }),
+      serverUrl: "http://localhost:3000",
+      appRoot: "/tmp/weather-agent",
+      bootDetections: [],
+      headerTips: ["Use /model to choose a subscription model."],
+      showVercelAuthSetupIssues: false,
+    }).run();
+
+    expect(headers[0]?.tip).toBe("Use /model to choose a subscription model.");
+  });
+
   it("still renders a header when info cannot be fetched", async () => {
     const headers: AgentTUIAgentHeader[] = [];
     const renderer = fakeRenderer({
@@ -567,6 +586,38 @@ function sessionYieldingTurns(turns: ReadonlyArray<readonly unknown[]>): ClientS
 }
 
 describe("EveTUIRunner idle session follow", () => {
+  it("routes a seeded bare /model through the product model command", async () => {
+    const modelCommand = vi.fn(async () => "Selected acme/fast.");
+    const getVercelAuthStatus = vi.fn(async (): Promise<"logged-out"> => "logged-out");
+    const target = {
+      kind: "local" as const,
+      serverUrl: "http://127.0.0.1:4321",
+      workspaceRoot: "/tmp/weather-agent",
+    };
+    const runner = new EveTUIRunner({
+      renderer: fakeRenderer({ setupFlow: createFakeSetupFlowRenderer() }),
+      name: "Weather Agent",
+      appRoot: "/tmp/weather-agent",
+      initialInput: "/model",
+      bootDetections: [],
+      getVercelAuthStatus,
+      promptCommandHandler: createPromptCommandHandler({ modelCommand, target }),
+      showVercelAuthSetupIssues: false,
+    });
+
+    await expect(runner.run()).resolves.toBeUndefined();
+
+    expect(getVercelAuthStatus).not.toHaveBeenCalled();
+    expect(modelCommand).toHaveBeenCalledOnce();
+    expect(modelCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appRoot: "/tmp/weather-agent",
+        argument: "",
+        serverUrl: "http://127.0.0.1:4321",
+      }),
+    );
+  });
+
   it("does not start idle following when model setup has no session", async () => {
     const handle = vi.fn(async () => ({ message: "dismissed" }));
     const renderIdleStream = vi.fn(async () => {});
@@ -3203,6 +3254,34 @@ describe("EveTUIRunner boot setup detection", () => {
     await runner.run();
 
     expect(warnings).toEqual(["1 setup issue: AI Gateway credentials · /model"]);
+  });
+
+  it("can hide Vercel auth issues without hiding model-provider issues", async () => {
+    const getVercelAuthStatus = vi.fn(async (): Promise<"logged-out"> => "logged-out");
+    const warnings: string[] = [];
+    const runner = new EveTUIRunner({
+      session: sessionYielding([]),
+      renderer: {
+        readPrompt: vi.fn(async () => undefined),
+        renderSetupWarning: (text) => warnings.push(text),
+        renderStream: vi.fn(async () => {}),
+      },
+      name: "Weather Agent",
+      appRoot: "/tmp/weather-agent",
+      bootDetections: [
+        {
+          id: "model-provider",
+          detect: () => [{ kind: "attention", label: "AI Gateway credentials", command: "/model" }],
+        },
+      ],
+      getVercelAuthStatus,
+      showVercelAuthSetupIssues: false,
+    });
+
+    await runner.run();
+
+    expect(warnings).toEqual(["1 setup issue: AI Gateway credentials · /model"]);
+    expect(getVercelAuthStatus).not.toHaveBeenCalled();
   });
 
   it("runs the initial model onboarding prerequisites before opening /model", async () => {

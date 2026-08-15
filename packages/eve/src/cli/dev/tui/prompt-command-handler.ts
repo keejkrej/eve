@@ -1,5 +1,8 @@
 import type { ApplyModelOutcome } from "#setup/flows/model-source-change.js";
+import { WizardCancelledError } from "#setup/step.js";
 import { toErrorMessage } from "#shared/errors.js";
+
+import type { DevelopmentTuiModelCommand } from "../../../public/tui/types.js";
 
 import type {
   PromptCommandHandler,
@@ -15,6 +18,8 @@ type ExtensionCommand = Extract<PromptCommand, { type: "extension" }>;
 
 export interface PromptCommandHandlerOptions {
   readonly target: DevelopmentTuiTarget;
+  /** Product-supplied `/model` flow; the handler owns its panel and status refresh. */
+  readonly modelCommand?: DevelopmentTuiModelCommand;
   /** Test seam; defaults to the model flow's shared source-change apply. */
   readonly applyModel?: (input: { appRoot: string; slug: string }) => Promise<ApplyModelOutcome>;
   /** Test seam; defaults to the model flow's external-provider refusal check. */
@@ -28,7 +33,7 @@ export interface PromptCommandHandlerOptions {
 export function createPromptCommandHandler(
   options: PromptCommandHandlerOptions,
 ): PromptCommandHandler {
-  return {
+  const handler: PromptCommandHandler = {
     async handle(
       command: ExtensionCommand,
       context: PromptCommandHandlerContext,
@@ -43,36 +48,71 @@ export function createPromptCommandHandler(
         };
       }
 
-      // `/model <slug>` applies directly; only the bare command opens the
-      // configure menu flow below.
-      if (command.name === "model" && command.argument.length > 0) {
+      if (command.name === "model") {
         if (target.kind !== "local") {
           return {
             message:
               "/model needs eve dev running the local server (it is not available with --url).",
           };
         }
-        const appRoot = target.workspaceRoot;
-        // Package-loading failures are command outcomes at this CLI boundary.
-        try {
-          const { modelChangeRefusalForUneditableModel } = await import("#setup/flows/model.js");
-          const { changeAgentModel, formatApplyModelOutcome } =
-            await import("#setup/flows/model-source-change.js");
-          // A source-backed model (an SDK model call) isn't a string literal eve
-          // can rewrite; refuse with a clear reason rather than silently no-op.
-          const checkRefusal = options.modelChangeRefusal ?? modelChangeRefusalForUneditableModel;
-          const refusal = await checkRefusal(appRoot);
-          if (refusal !== null) {
-            return { message: refusal };
+
+        if (options.modelCommand !== undefined) {
+          const flow = context.renderer.setupFlow;
+          if (flow === undefined) {
+            return { message: "/model is not supported by this renderer." };
           }
-          const applyModel = options.applyModel ?? changeAgentModel;
-          return {
-            message: formatApplyModelOutcome(await applyModel({ appRoot, slug: command.argument })),
-          };
-        } catch (error) {
-          return {
-            message: `Couldn't change the model: ${toErrorMessage(error)}`,
-          };
+
+          flow.begin("Configure the agent model", "pulse");
+          try {
+            const { createTuiPrompter } = await import("./tui-prompter.js");
+            return {
+              message: await options.modelCommand({
+                appRoot: target.workspaceRoot,
+                serverUrl: target.serverUrl,
+                argument: command.argument,
+                prompter: createTuiPrompter(flow),
+              }),
+              effect: { kind: "model-access-changed" },
+            };
+          } catch (error) {
+            if (error instanceof WizardCancelledError) {
+              return { message: "/model dismissed." };
+            }
+            return {
+              message: `Couldn't change the model: ${toErrorMessage(error)}`,
+            };
+          } finally {
+            flow.end({ preserveDiagnostics: false });
+          }
+        }
+
+        // `/model <slug>` applies directly; only the bare command opens the
+        // built-in configure menu flow below.
+        if (command.argument.length > 0) {
+          const appRoot = target.workspaceRoot;
+          // Package-loading failures are command outcomes at this CLI boundary.
+          try {
+            const { modelChangeRefusalForUneditableModel } = await import("#setup/flows/model.js");
+            const { changeAgentModel, formatApplyModelOutcome } =
+              await import("#setup/flows/model-source-change.js");
+            // A source-backed model (an SDK model call) isn't a string literal eve
+            // can rewrite; refuse with a clear reason rather than silently no-op.
+            const checkRefusal = options.modelChangeRefusal ?? modelChangeRefusalForUneditableModel;
+            const refusal = await checkRefusal(appRoot);
+            if (refusal !== null) {
+              return { message: refusal };
+            }
+            const applyModel = options.applyModel ?? changeAgentModel;
+            return {
+              message: formatApplyModelOutcome(
+                await applyModel({ appRoot, slug: command.argument }),
+              ),
+            };
+          } catch (error) {
+            return {
+              message: `Couldn't change the model: ${toErrorMessage(error)}`,
+            };
+          }
         }
       }
 
@@ -135,4 +175,8 @@ export function createPromptCommandHandler(
       }
     },
   };
+
+  return options.modelCommand === undefined
+    ? handler
+    : { ...handler, initialModelCommand: "handle" };
 }

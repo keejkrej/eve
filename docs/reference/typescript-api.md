@@ -3,7 +3,7 @@ title: "TypeScript API Reference"
 description: "The define* helpers, the runtime ctx, and where each one is imported from."
 ---
 
-This is the public surface of the `eve` package: the `define*` helpers you author with, the `ctx` they receive at runtime, and the import path for each. The full contract lives in `packages/eve/src/public/index.ts`; anything not exported there is a framework internal.
+This is the public surface of the `eve` package: the `define*` helpers you author with, the `ctx` they receive at runtime, and the import path for each. Public entrypoints are listed in the package `exports` map; the main authoring contract lives in `packages/eve/src/public/index.ts`. Anything outside those entrypoints is a framework internal.
 
 Identity comes from the filesystem, not a field you set. A tool at `agent/tools/get_weather.ts` is `get_weather`, and a connection at `agent/connections/linear.ts` is `linear`, so no definition carries a `name` or `id`.
 
@@ -97,8 +97,15 @@ A few non-`define*` helpers round out the set: `disableTool`, `experimental_work
 | `eve/react`, `eve/vue`, `eve/svelte`                        | `useEveAgent`                                                           |
 | `eve/next`, `eve/nuxt`, `eve/sveltekit`                     | framework bundler plugins                                               |
 | [`eve/client`](../guides/client/overview)                   | `Client`, `ClientSession`                                               |
+| [`eve/tui`](../guides/dev-tui#embed-the-tui)                | embeddable development TUI and its callback/input types                 |
 
-Exported types ship from the same entrypoint as the helper they describe (for example `ToolDefinition` and `ToolContext` from `eve/tools`). For the exhaustive list, read `packages/eve/src/public/index.ts`.
+Exported types ship from the same entrypoint as the helper they describe (for example `ToolDefinition` and `ToolContext` from `eve/tools`). Check the package `exports` map for the exhaustive entrypoint list.
+
+## Development TUI
+
+`runDevelopmentTui(input)` from `eve/tui` attaches the interactive terminal UI to a local or remote eve server. A local target includes `serverUrl` and `workspaceRoot`; the embedding process owns the server lifecycle.
+
+`RunDevelopmentTuiInput` accepts the CLI display options plus product-facing customizations: `name`, `headerTips`, `externalProviderDisplayNames`, `showVercelAuthSetupIssues`, and `modelCommand`. The `DevelopmentTuiModelCommand` callback can use a `DevelopmentTuiPrompter` to render select menus inside eve's setup panel, persist product-specific model configuration, and return the outcome line shown to the user. See [Embed the TUI](../guides/dev-tui#embed-the-tui) for an example.
 
 ## ChatGPT subscription models
 

@@ -1,14 +1,14 @@
+import { Client } from "#client/client.js";
+import { ClientSession } from "#client/session.js";
+import type { AgentInfoResult } from "#client/types.js";
+import type { InputOption, InputRequest, InputResponse } from "#runtime/input/types.js";
 import {
   type ActionResultStreamEvent,
   type ActionsRequestedStreamEvent,
-  type AgentInfoResult,
   type AuthorizationCompletedStreamEvent,
   type ConnectionAuthorizationOutcome,
   type AuthorizationRequiredStreamEvent,
-  type InputOption,
-  type InputRequest,
   type InputRequestedStreamEvent,
-  type InputResponse,
   type MessageAppendedStreamEvent,
   type ReasoningAppendedStreamEvent,
   type SessionFailedStreamEvent,
@@ -16,13 +16,11 @@ import {
   type MessageStreamEvent,
   type SubagentCalledStreamEvent,
   type SubagentCompletedStreamEvent,
-  Client,
-  ClientSession,
-} from "#client/index.js";
+  isCurrentTurnBoundaryEvent,
+} from "#protocol/message.js";
 import { loadDevelopmentEnvironmentFiles } from "#cli/dev/environment.js";
 import { subscribeDevelopmentSandboxPrewarmLogs } from "#execution/sandbox/development-prewarm.js";
 import { createEventDeduper } from "#protocol/event-dedupe.js";
-import { isCurrentTurnBoundaryEvent } from "#protocol/message.js";
 import {
   createDevelopmentRuntimeArtifactRefresher,
   type DevelopmentRuntimeArtifactRefresher,
@@ -392,6 +390,8 @@ export interface PromptCommandOutcome {
 }
 
 export interface PromptCommandHandler {
+  /** Routes a seeded bare `/model` directly to this handler instead of onboarding. */
+  readonly initialModelCommand?: "handle";
   handle(
     command: Extract<PromptCommand, { type: "extension" }>,
     context: PromptCommandHandlerContext,
@@ -518,10 +518,9 @@ export class EveTUIRunner {
   readonly #mcpConnectionStatus?: McpConnectionStatusTracker;
   /**
    * The header's message-of-the-day, picked once so dev HMR header
-   * refreshes don't re-roll it mid-session. Local sessions only — every
-   * tip references local-only slash commands.
+   * refreshes don't re-roll it mid-session. Local sessions only.
    */
-  readonly #headerTip = pickAgentHeaderTip();
+  readonly #headerTip: string | undefined;
   #agentInfo?: AgentInfoResult;
   /**
    * approval-id → input-request map populated as `input.requested` events
@@ -567,12 +566,15 @@ export class EveTUIRunner {
   #failedSession?: ClientSession;
   #unsubscribeDevelopmentSandboxLogs?: () => void;
   readonly #lifecycle?: CommandLifecycle;
+  readonly #showVercelAuthSetupIssues: boolean;
 
   constructor(options: EveTUIRunnerOptions) {
     this.#session = options.session;
     if (options.client !== undefined) this.#client = options.client;
     if (options.lifecycle !== undefined) this.#lifecycle = options.lifecycle;
     this.#renderer = createRenderer(options);
+    this.#headerTip = pickAgentHeaderTip(Math.random, options.headerTips);
+    this.#showVercelAuthSetupIssues = options.showVercelAuthSetupIssues ?? true;
     const pumpOptions: SubagentPumpOptions = { formatActionResultError };
     if (this.#client !== undefined) pumpOptions.client = this.#client;
     if (this.#renderer.subagents !== undefined) pumpOptions.view = this.#renderer.subagents;
@@ -601,6 +603,12 @@ export class EveTUIRunner {
         this.#mcpConnectionStatus = createMcpConnectionStatusTracker({
           onChange: () => {},
           probe: options.probeMcpConnection,
+          targets: () =>
+            (this.#agentInfo?.connections ?? []).flatMap((connection) =>
+              connection.protocol === "mcp"
+                ? [{ slug: connection.connectionName, url: connection.url }]
+                : [],
+            ),
         });
       }
     }
@@ -681,7 +689,9 @@ export class EveTUIRunner {
       serverUrl,
     };
     if (headerInfo !== undefined) header.info = headerInfo;
-    if (this.#appRoot !== undefined) header.tip = this.#headerTip;
+    if (this.#appRoot !== undefined && this.#headerTip !== undefined) {
+      header.tip = this.#headerTip;
+    }
     this.#renderer.renderAgentHeader?.(header);
     return headerInfo;
   }
@@ -751,7 +761,15 @@ export class EveTUIRunner {
       this.#renderer.setupFlow !== undefined;
     if (initialModelOnboarding) {
       initialDraft = undefined;
-      await this.#runInitialModelOnboarding(title);
+      if (this.#promptCommandHandler?.initialModelCommand === "handle") {
+        await this.#executeExtensionCommand(
+          { type: "extension", name: "model", argument: "" },
+          title,
+          { trigger: "startup" },
+        );
+      } else {
+        await this.#runInitialModelOnboarding(title);
+      }
     }
 
     while (true) {
@@ -1498,7 +1516,7 @@ export class EveTUIRunner {
     // Login state is a `vercel whoami` round-trip — too costly for the
     // cheap-and-local boot detections above — so it rides its own probe off
     // the critical path and never delays the first prompt.
-    this.#probeAuthIssue();
+    if (this.#showVercelAuthSetupIssues) this.#probeAuthIssue();
   }
 
   /** Repaints the attention line from the cached detection + auth issues, or clears it. */
@@ -1540,10 +1558,14 @@ export class EveTUIRunner {
     if (info !== undefined) context.info = info;
     try {
       this.#bootIssues = await detectSetupIssues(context, this.#bootDetections);
-      const status = await this.#getVercelAuthStatus(appRoot, {
-        signal: this.#authProbeAbort.signal,
-      });
-      this.#authIssue = authIssueForStatus(status);
+      if (this.#showVercelAuthSetupIssues) {
+        const status = await this.#getVercelAuthStatus(appRoot, {
+          signal: this.#authProbeAbort.signal,
+        });
+        this.#authIssue = authIssueForStatus(status);
+      } else {
+        this.#authIssue = undefined;
+      }
     } catch {
       return;
     }
@@ -1889,6 +1911,7 @@ function createRenderer(options: EveTUIRunnerOptions): AgentTUIRenderer {
     contextSize: options.contextSize,
     logs: options.logs,
     availablePromptCommands: options.availablePromptCommands,
+    externalProviderDisplayNames: options.externalProviderDisplayNames,
     input: options.userInput,
     output: options.screen,
     diagnostics: options.diagnostics,

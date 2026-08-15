@@ -4894,6 +4894,34 @@ describe("TerminalRenderer status line", () => {
     renderer.shutdown();
   });
 
+  it("uses caller-supplied external provider display names", async () => {
+    const screen = new MockScreen({ columns: 80, rows: 30 });
+    const input = new MockUserInput();
+    const renderer = new TerminalRenderer({
+      input,
+      output: screen,
+      captureForeignOutput: false,
+      unicode: true,
+      externalProviderDisplayNames: { openai: "chatgpt-sub" },
+    });
+    renderer.renderAgentHeader({
+      name: "Weather Agent",
+      serverUrl: "http://localhost:3000",
+      info: agentInfoWithModel("openai/gpt-5.6-sol", {
+        kind: "external",
+        provider: "openai",
+      }),
+    });
+
+    const prompt = renderer.readPrompt();
+    expect(screen.snapshot()).toContain("openai/gpt-5.6-sol via chatgpt-sub⌝");
+
+    input.type("done");
+    input.enter();
+    await prompt;
+    renderer.shutdown();
+  });
+
   it("suppresses the status line while a setup flow panel is open", () => {
     const { screen, renderer } = makeRenderer();
     renderer.renderNotice("anchor");

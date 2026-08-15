@@ -1,7 +1,8 @@
-import { createPromptCommandOutput, whimsyFor } from "#setup/cli/index.js";
+import { createPromptCommandOutput } from "#setup/cli/command-output.js";
+import { whimsyFor } from "#setup/cli/whimsy.js";
 import { HumanActionRequiredError } from "#setup/human-action.js";
 import { captureVercel, runVercel, type VercelCaptureFailure } from "#setup/primitives/index.js";
-import pc from "picocolors";
+import pc from "#compiled/picocolors/index.js";
 import { z } from "zod";
 
 import {

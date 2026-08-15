@@ -1,4 +1,6 @@
-import { AgentInfoResponseError, ClientError, type Client } from "#client/index.js";
+import { AgentInfoResponseError } from "#client/agent-info-error.js";
+import type { Client } from "#client/client.js";
+import { ClientError } from "#client/client-error.js";
 import {
   formatVercelTrustedSourcesFailure,
   isVercelAuthChallenge,

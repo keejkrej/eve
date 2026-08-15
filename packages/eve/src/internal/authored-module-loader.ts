@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { CompiledAgentManifest } from "#compiler/manifest.js";
 import { createCompiledModuleMapSource } from "#compiler/module-map.js";
@@ -125,17 +126,7 @@ async function doLoadAuthoredModuleNamespace(
 }
 
 function createFileImportSpecifier(modulePath: string): string {
-  const normalizedPath = modulePath.replaceAll("\\", "/");
-
-  if (/^[A-Za-z]:\//.test(normalizedPath)) {
-    return `file:///${encodeURI(normalizedPath)}`;
-  }
-
-  if (normalizedPath.startsWith("/")) {
-    return `file://${encodeURI(normalizedPath)}`;
-  }
-
-  return normalizedPath;
+  return pathToFileURL(modulePath).href;
 }
 
 /**

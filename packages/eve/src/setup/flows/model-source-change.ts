@@ -10,7 +10,7 @@ import type {
 } from "#source-change/apply-agent-model-settings.js";
 import { createStaticSourceChange } from "#source-change/static-source-change.js";
 
-import pc from "picocolors";
+import pc from "#compiled/picocolors/index.js";
 
 export type ApplyModelSettingsOutcome =
   | {

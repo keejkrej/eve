@@ -710,7 +710,12 @@ describe("application Nitro creation", () => {
       buildDir: nitroBuildDir,
     });
     createNitroMock.mockResolvedValueOnce(nitroStub.nitro);
-    const workflowBuildDir = await mkdtemp(join(tmpdir(), "eve-step-transform-"));
+    const workflowBuildDir = await mkdtemp(
+      join(
+        tmpdir(),
+        process.platform === "win32" ? "eve-step-#-transform-" : "eve-step-#-?-transform-",
+      ),
+    );
     const importedModulesDir = join(workflowBuildDir, "imports");
     const stepModulePath = join(importedModulesDir, "step-module.js");
     const bootstrapModulePath = join(importedModulesDir, "bootstrap.mjs");
@@ -777,7 +782,18 @@ describe("application Nitro creation", () => {
         throw new Error("Expected Nitro step side-effects plugin to be registered.");
       }
 
-      expect(await stepTransformPlugin.transform("step source", stepModulePath)).toEqual({
+      expect(
+        await stepTransformPlugin.transform("step source", `${stepModulePath}?commonjs-proxy`),
+      ).toEqual({
+        code: "transformed-step-module",
+        map: null,
+      });
+      expect(
+        await stepTransformPlugin.transform(
+          "file-system step source",
+          `/@fs/${stepModulePath.replaceAll("\\", "/")}?commonjs-proxy`,
+        ),
+      ).toEqual({
         code: "transformed-step-module",
         map: null,
       });
@@ -836,9 +852,16 @@ describe("application Nitro creation", () => {
       expect(
         await stepTransformPlugin.transform("other source", "/tmp/not-imported.js"),
       ).toBeNull();
-      expect(applyWorkflowTransform).toHaveBeenCalledTimes(4);
+      expect(applyWorkflowTransform).toHaveBeenCalledTimes(5);
+      expect(applyWorkflowTransform).toHaveBeenCalledWith(
+        expect.any(String),
+        "step source",
+        "step",
+        stepModulePath,
+        "/tmp/weather-agent",
+      );
       expect(applyWorkflowTransform).toHaveBeenNthCalledWith(
-        4,
+        5,
         "src/execution/create-session-step.js",
         "package dist source",
         "step",

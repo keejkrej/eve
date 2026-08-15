@@ -86,6 +86,19 @@ void (async () => {
     );
     console.log(theme.muted("[tui-packed-install] consumer npm install completed"));
 
+    const publicImportPath = join(consumerRoot, "import-public-tui.mjs");
+    await writeFile(
+      publicImportPath,
+      [
+        'import { runDevelopmentTui } from "eve/tui";',
+        'if (typeof runDevelopmentTui !== "function") throw new Error("Missing runDevelopmentTui");',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await exec(process.execPath, [publicImportPath], consumerRoot);
+    console.log(theme.muted("[tui-packed-install] public eve/tui import completed"));
+
     // Imported by file URL: the harness is not on the package's `exports`
     // map, and the point is to load the *installed* module graph — every
     // bare specifier in it resolves against the consumer's node_modules.

@@ -224,6 +224,15 @@ describe("buildStatusLine", () => {
     });
     expect(chatgpt).toBe("openai/gpt-5.6-sol via chatgpt-sub⌝");
 
+    const callerNamed = buildStatusLine({
+      model: "openai/gpt-5.6-sol",
+      endpoint: { kind: "external", provider: "openai" },
+      externalProviderDisplayNames: { openai: "chatgpt-sub" },
+      theme: plain,
+      width: 120,
+    });
+    expect(callerNamed).toBe("openai/gpt-5.6-sol via chatgpt-sub⌝");
+
     const notConnected = buildStatusLine({
       model: "m",
       endpoint: { kind: "gateway", connected: false },

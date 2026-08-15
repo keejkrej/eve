@@ -25,6 +25,8 @@ export interface StatusLineInput {
   logLevel?: LogDisplayMode;
   /** Model endpoint readiness: external, or AI Gateway connected/not-connected. */
   endpoint?: ModelEndpointStatus;
+  /** Caller-supplied presentation aliases for external provider identifiers. */
+  externalProviderDisplayNames?: Readonly<Record<string, string>>;
   /** Workspace-scoped Vercel state; identity absent while unlinked or still resolving. */
   vercel?: VercelStatusSnapshot;
   /** Remote server identity and its current connection/authentication state. */
@@ -76,7 +78,10 @@ const EXTERNAL_PROVIDER_DISPLAY_NAMES: Readonly<Record<string, string>> = {
  * authenticates the call.
  */
 function renderEndpoint(
-  input: Pick<StatusLineInput, "endpoint" | "remote" | "theme" | "vercel">,
+  input: Pick<
+    StatusLineInput,
+    "endpoint" | "externalProviderDisplayNames" | "remote" | "theme" | "vercel"
+  >,
 ): { readonly text: string; readonly standalone: boolean } | undefined {
   if (input.remote !== undefined || input.endpoint === undefined) return undefined;
 
@@ -89,7 +94,9 @@ function renderEndpoint(
   const clause = (name: string, suffix: string) => `${c.dim("via ")}${name}${c.dim(suffix)}`;
   if (input.endpoint.kind === "external") {
     const provider =
-      EXTERNAL_PROVIDER_DISPLAY_NAMES[input.endpoint.provider] ?? input.endpoint.provider;
+      input.externalProviderDisplayNames?.[input.endpoint.provider] ??
+      EXTERNAL_PROVIDER_DISPLAY_NAMES[input.endpoint.provider] ??
+      input.endpoint.provider;
     // The `⌝` mark stays at the terminal's default foreground — full
     // intensity on any theme — while the clause around it is dim.
     return { text: `${c.dim(`via ${provider}`)}${g.external}`, standalone: false };

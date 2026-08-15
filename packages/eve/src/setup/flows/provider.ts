@@ -1,4 +1,4 @@
-import pc from "picocolors";
+import pc from "#compiled/picocolors/index.js";
 
 import { appendEnv } from "../append-env.js";
 import {

@@ -65,6 +65,46 @@ eve dev --tools full --reasoning collapsed --logs all
 
 Use `--host` and `--port` to bind the local server, or `--no-ui` to run without the terminal UI. See the [`eve dev` CLI reference](../reference/cli#eve-dev) for the complete option list, accepted values, and defaults.
 
+## Embed the TUI
+
+A product that owns the development server can run the same terminal experience from a Node.js process with `eve/tui`. Pass the already-running local server and its application root:
+
+```ts
+import { runDevelopmentTui, type DevelopmentTuiModelCommand } from "eve/tui";
+
+const modelCommand: DevelopmentTuiModelCommand = async ({ argument, prompter }) => {
+  const model =
+    argument ||
+    (await prompter.select({
+      message: "Choose a model",
+      options: [
+        { value: "acme/fast", label: "Fast" },
+        { value: "acme/capable", label: "Capable" },
+      ],
+    }));
+
+  // Persist the product's model selection here.
+  return `Selected ${model}.`;
+};
+
+await runDevelopmentTui({
+  target: {
+    kind: "local",
+    serverUrl: "http://127.0.0.1:3000",
+    workspaceRoot: process.cwd(),
+  },
+  name: "Acme Agent",
+  modelCommand,
+  headerTips: ["Use /model to change the active model."],
+  externalProviderDisplayNames: { acme: "acme-subscription" },
+  showVercelAuthSetupIssues: false,
+});
+```
+
+The optional `modelCommand` replaces both bare `/model` and `/model <value>`. It receives the application root, server URL, command argument, and a TUI-native select prompter; return the outcome line to display after persisting the selection. eve closes the setup panel and refreshes model status when the callback succeeds.
+
+`headerTips: []` omits the local header tip. `externalProviderDisplayNames` changes presentation only. `showVercelAuthSetupIssues: false` hides Vercel CLI and login warnings without hiding model-provider issues. The embedding process remains responsible for starting and restarting the development server.
+
 ## Connect to a deployment
 
 Pass a URL to use the terminal UI with an existing eve server instead of starting one locally:

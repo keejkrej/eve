@@ -1,4 +1,4 @@
-import { Client } from "#client/index.js";
+import { Client } from "#client/client.js";
 import type { DevBootProgressReporter } from "#internal/dev-boot-progress.js";
 import type { CommandLifecycle } from "#cli/shutdown.js";
 import {
@@ -22,6 +22,7 @@ import { probeMcpConnection } from "./mcp-connection-status.js";
 import { EveTUIRunner, type EveTUIRunnerOptions } from "./runner.js";
 import { remoteHost, type DevelopmentTuiTarget, type RemoteDevelopmentTarget } from "./target.js";
 import type { TuiDisplayOptions } from "./types.js";
+import type { DevelopmentTuiModelCommand } from "../../../public/tui/types.js";
 
 export type { DevelopmentTuiTarget } from "./target.js";
 
@@ -35,6 +36,8 @@ export interface RunDevelopmentTuiInput extends TuiDisplayOptions {
    * `/model` starts fresh-agent onboarding. Applies to the first prompt only.
    */
   readonly initialInput?: string;
+  /** Replaces eve's built-in `/model` behavior for this TUI session. */
+  readonly modelCommand?: DevelopmentTuiModelCommand;
   /** Reports local CLI boot phases. Omitted for remote and programmatic TUI runs. */
   readonly onBootProgress?: DevBootProgressReporter;
   /** Gives setup subprocesses exclusive terminal and development-host ownership. */
@@ -88,6 +91,7 @@ export async function runDevelopmentTui(input: RunDevelopmentTuiInput): Promise<
     target,
     headers,
     initialInput,
+    modelCommand,
     onBootProgress,
     lifecycle,
     withExclusiveTerminal,
@@ -111,11 +115,16 @@ export async function runDevelopmentTui(input: RunDevelopmentTuiInput): Promise<
         }),
   );
 
+  const promptCommandHandler =
+    modelCommand === undefined
+      ? createPromptCommandHandler({ target })
+      : createPromptCommandHandler({ modelCommand, target });
+
   const options: EveTUIRunnerOptions = {
     ...display,
     client,
     serverUrl,
-    promptCommandHandler: createPromptCommandHandler({ target }),
+    promptCommandHandler,
     availablePromptCommands: promptCommandsFor(target.kind),
     formatTransportError: (error) =>
       isVercelAuthChallenge(error)
